@@ -22,6 +22,27 @@ Automatically downloads all invoices from the Feishu mailbox "发票" folder, re
 Copy-Item "invoice\invoice.md" "$env:USERPROFILE\.claude\commands\invoice.md"
 ```
 
+### [`/knowledge-card`](./knowledge-card/knowledge-card.md) — 知识卡片生成
+
+Extracts the core theme, logical structure, and key insight from any long-form content (articles, book notes, essays), then generates a Morandi-style knowledge card image using the current client's native image generation (Claude Code, Codex, ChatGPT, Gemini).
+
+**Steps:**
+1. Deep extraction — structured three-part summary: Theme / Structure / Insight
+2. Format card copy — title, bullet points, insight, source tag
+3. Generate image — prompt sent to current client's built-in image tool (no API key needed)
+
+**Register:**
+```bash
+# macOS / Linux
+curl -o ~/.claude/commands/knowledge-card.md \
+  "https://raw.githubusercontent.com/Jat-echo/claude-skills/main/knowledge-card/knowledge-card.md"
+```
+```powershell
+# Windows
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Jat-echo/claude-skills/main/knowledge-card/knowledge-card.md" `
+  -OutFile "$env:USERPROFILE\.claude\commands\knowledge-card.md"
+```
+
 ---
 
 ## Adding a New Skill
