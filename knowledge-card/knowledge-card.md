@@ -1,6 +1,6 @@
 # 知识卡片生成 Skill
 
-将任意长文、书摘、笔记或知识点，自动提炼为结构化内容，并生成高颜值知识卡片的 Gemini 绘图提示词。
+将任意长文、书摘、笔记或知识点，自动提炼为结构化内容，并调用 GPT Image 2 直接生成高颜值知识卡片插画。
 
 ## 调用方式
 
@@ -50,51 +50,131 @@
 
 ---
 
-### Step 3：生成 Gemini 绘图提示词
+### Step 3：调用 GPT Image 2 生成卡片插画
 
-将 Step 2 的卡片文案填入以下模板，输出完整的图像生成提示词，用于在 Gemini（Nano Banana 2）中生成插画：
+使用 OpenAI `gpt-image-1` 模型，将 Step 2 的卡片文案转化为知识卡片图像。
+
+#### 方式 A：通过 ChatGPT 网页（无需 API）
+
+将以下提示词粘贴到 ChatGPT（已开启图像生成的账号）：
 
 ```
-目的与目标：
-将以下知识点转化为逻辑结构清晰的知识卡片图像。
-生成有助于理解和记忆的视觉内容。
-保持专业、艺术且视觉吸引力强的一致美学风格。
+请根据以下知识卡片内容，生成一张高颜值知识卡片插画：
 
-知识卡片内容：
 {Step 2 输出的卡片文案}
 
-图像生成规范：
-a) 画幅比例：3:1 的横向长方形格式。
-b) 色彩搭配：莫兰迪漫画风（低饱和度、柔和色调，主色系为灰蓝、灰绿、米白、藕粉）。
-c) 背景风格：Instagram 美学（简约、干净、现代）。
-d) 字体效果：文字呈现具有钢笔书写质感，优雅且有手绘感。
-e) 视觉辅助：加入与知识点直接相关、有助于理解的小型漫画风格插图。
-
-内容结构要求：
-a) 在卡片上逻辑清晰地组织信息，左侧为插图区，右侧为文字区。
-b) 确保文本与插图之间关系明确，提升教育价值。
-c) 卡片底部留有来源/标签区域。
+图像要求：
+- 画幅比例：3:1 横向长方形
+- 色彩：莫兰迪风格（低饱和度，主色系灰蓝/灰绿/米白/藕粉）
+- 背景：Instagram 极简美学，干净留白
+- 文字质感：钢笔书写手绘感，优雅排版
+- 插图：左侧区域加入与主题直接相关的小型漫画插图
+- 布局：左插图区 / 右文字区，底部来源标签
+- 整体风格：专业、艺术、视觉吸引力强
 ```
+
+#### 方式 B：通过 OpenAI API（Python）
+
+```python
+from openai import OpenAI
+import base64
+
+client = OpenAI()  # 需配置 OPENAI_API_KEY 环境变量
+
+def generate_knowledge_card(card_content: str, output_path: str = "card.png"):
+    prompt = f"""
+请根据以下知识卡片内容生成一张高颜值知识卡片插画：
+
+{card_content}
+
+图像要求：
+- 画幅比例：3:1 横向长方形（宽1536px 高512px）
+- 色彩：莫兰迪风格（低饱和度，主色系灰蓝/灰绿/米白/藕粉）
+- 背景：Instagram 极简美学，干净留白
+- 文字质感：钢笔书写手绘感，优雅排版
+- 插图：左侧区域加入与主题直接相关的小型漫画插图
+- 布局：左插图区 / 右文字区，底部来源标签
+- 整体风格：专业、艺术、视觉吸引力强
+"""
+    response = client.images.generate(
+        model="gpt-image-1",
+        prompt=prompt,
+        size="1536x1024",   # 3:2，最接近 3:1 的可用尺寸
+        quality="high",
+        n=1,
+    )
+
+    image_data = base64.b64decode(response.data[0].b64_json)
+    with open(output_path, "wb") as f:
+        f.write(image_data)
+    print(f"知识卡片已保存到：{output_path}")
+
+# 示例调用
+card_content = """
+【标题】深度工作：认知时代的稀缺竞争力
+
+【要点】
+① 深度工作 = 无干扰状态下的高强度专注
+② 能创造新价值、提升技能，且极难被复制
+③ 浮浅工作消耗时间却产出低价值成果
+④ 刻意保护"深度时间"是高产出者的共同习惯
+
+【启发】
+每天保留 2 小时关掉通知的深度时间，只做当下最重要的一件认知性工作。
+
+【来源】《深度工作》Cal Newport
+"""
+generate_knowledge_card(card_content, "deep_work_card.png")
+```
+
+> **依赖安装：** `pip install openai`
+> **API Key：** 前往 [platform.openai.com](https://platform.openai.com/api-keys) 获取
 
 ---
 
 ### Step 4：使用指引
 
-1. **复制提示词** → 打开 [Gemini](https://gemini.google.com) 或已配置好的 Gem（自定义机器人）
-2. **粘贴发送** → Gemini 直接生成知识卡片插画原图
-3. **微调（可选）** → 根据需要调整色彩关键词（如"暖棕色系"、"深色模式"）
-4. **合成发布** → 使用排版工具将文案与图片结合，完成知识卡片
+1. **方式 A（推荐新手）** → 复制 Step 3 提示词，打开 ChatGPT，粘贴发送，直接得到图片
+2. **方式 B（推荐自动化）** → 配置 `OPENAI_API_KEY`，运行 Python 脚本，图片自动保存本地
+3. **微调（可选）** → 在提示词中调整色彩关键词，如"暖棕莫兰迪"、"深色卡片"、"樱花粉系"
+4. **合成发布** → 直接使用生成图，或导入排版工具叠加文字后发布
 
 ---
 
-## Gems 自动化（永久化方案）
+## GPT Image 2 自动化（批量制卡）
 
-将 Step 3 的提示词模板内嵌到 Gemini Gems 中，实现一键制卡：
+对多条知识点批量生成卡片：
 
-1. 进入 Gemini 侧边栏 → **Gems（自定义机器人）** → **新建 Gem**
-2. 在"指令"区域粘贴 Step 3 的完整提示词模板
-3. 命名为"知识卡片机器人"并保存
-4. 以后只需将长文发送给该 Gem，自动完成：内容拆解 → 视觉建模 → 生成插画
+```python
+import os
+from openai import OpenAI
+import base64
+
+client = OpenAI()
+
+topics = [
+    ("深度工作", "《深度工作》Cal Newport"),
+    ("第一性原理", "埃隆·马斯克思维方式"),
+    # 添加更多主题...
+]
+
+for title, source in topics:
+    # 此处接入 Step 1 提炼逻辑（可用 Claude API 自动提炼）
+    card_content = f"【标题】{title}\n【来源】{source}"
+    output_file = f"card_{title}.png"
+
+    response = client.images.generate(
+        model="gpt-image-1",
+        prompt=f"知识卡片，莫兰迪风，3:1横版，钢笔手绘感，内容：{card_content}",
+        size="1536x1024",
+        quality="high",
+        n=1,
+    )
+    image_data = base64.b64decode(response.data[0].b64_json)
+    with open(output_file, "wb") as f:
+        f.write(image_data)
+    print(f"✓ {output_file}")
+```
 
 ---
 
