@@ -1,6 +1,6 @@
 # 知识卡片生成 Skill
 
-将任意长文、书摘、笔记或知识点，自动提炼为结构化内容，并生成高颜值知识卡片插画。
+将任意长文、书摘、笔记或知识点，自动提炼为结构化内容，并由当前客户端直接生成高颜值知识卡片插画。
 
 ## 调用方式
 
@@ -31,7 +31,7 @@
 
 ### Step 2：生成知识卡片内容文案
 
-基于 Step 1 的提炼结果，输出卡片正文，格式如下：
+基于 Step 1 的提炼结果，输出卡片正文：
 
 ```
 【标题】{核心主题，≤20字}
@@ -50,9 +50,9 @@
 
 ---
 
-### Step 3：生成图像
+### Step 3：生成知识卡片图像
 
-#### 图像提示词（所有方式通用）
+完成 Step 2 后，**立即**使用当前客户端的原生图像生成能力，基于以下提示词直接生成图像：
 
 ```
 一张高颜值知识卡片插画，内容如下：
@@ -69,76 +69,23 @@
 - 整体风格：专业、艺术、视觉吸引力强
 ```
 
-#### 生图方式优先级
+各客户端调用方式：
 
-按以下顺序判断当前环境，选择对应方式：
+| 客户端 | 生图方式 |
+|--------|---------|
+| **Claude Code / claude.ai** | Claude 直接调用内置图像生成工具输出图像 |
+| **Codex** | Codex 原生调用 GPT Image 2（`gpt-image-1`）生成 |
+| **ChatGPT 网页** | ChatGPT 内置图像生成直接输出 |
+| **Gemini** | Gemini 调用 Imagen 生成 |
 
----
-
-**优先：GPT Image 2（`gpt-image-1`）**
-
-默认首选方案，需配置 `OPENAI_API_KEY`：
-
-```python
-from openai import OpenAI
-import base64
-
-client = OpenAI()  # 需配置 OPENAI_API_KEY 环境变量
-
-def generate_knowledge_card(card_content: str, output_path: str = "card.png"):
-    prompt = f"""一张高颜值知识卡片插画，内容如下：
-
-{card_content}
-
-图像要求：
-- 画幅比例：3:1 横向长方形（1536x512）
-- 色彩：莫兰迪风格（低饱和度，主色系灰蓝/灰绿/米白/藕粉）
-- 背景：Instagram 极简美学，干净留白
-- 文字质感：钢笔书写手绘感，优雅排版
-- 插图：左侧加入与主题相关的小型漫画插图
-- 布局：左插图区 / 右文字区，底部来源标签
-"""
-    response = client.images.generate(
-        model="gpt-image-1",
-        prompt=prompt,
-        size="1536x1024",  # 最接近 3:1 的可用尺寸
-        quality="high",
-        n=1,
-    )
-    image_data = base64.b64decode(response.data[0].b64_json)
-    with open(output_path, "wb") as f:
-        f.write(image_data)
-    print(f"知识卡片已保存：{output_path}")
-```
-
-> 依赖：`pip install openai` | Key：[platform.openai.com](https://platform.openai.com/api-keys)
+> 无论在哪个客户端执行，不需要任何 API Key 或额外配置，直接把提示词交给当前客户端生成即可。
 
 ---
 
-**Codex 环境：直接生成**
+### Step 4：微调与发布
 
-在 OpenAI Codex 环境中运行时，AI 可直接调用图像生成能力，无需额外配置——将上方提示词直接发给 Codex，由 Codex 原生生成图像并返回结果。
-
----
-
-**兜底：当前客户端原生能力**
-
-若无法调用 GPT Image 2 API，则使用当前所在客户端的图像生成能力：
-
-| 当前客户端 | 生图方式 |
-|-----------|---------|
-| **Claude**（claude.ai / Claude Code） | 直接将图像提示词发给 Claude，由 Claude 调用其支持的图像生成工具输出图像 |
-| **ChatGPT 网页** | 粘贴提示词，ChatGPT 内置 DALL-E / GPT Image 直接生成 |
-| **Gemini** | 粘贴提示词，Gemini 调用 Imagen 生成 |
-| **其他客户端** | 将提示词提交给该客户端，使用其内置图像生成能力 |
-
----
-
-### Step 4：使用指引
-
-1. **检查环境** → 有 `OPENAI_API_KEY` 则运行 Python 脚本；在 Codex 则直接生成；否则把提示词发给当前客户端
-2. **微调（可选）** → 调整色彩关键词，如"暖棕莫兰迪"、"深色卡片"、"樱花粉系"
-3. **合成发布** → 直接使用生成图，或导入排版工具叠加文字后发布
+- **微调色调**（可选）：在提示词中替换色彩关键词，如"暖棕莫兰迪"、"深色卡片"、"樱花粉系"
+- **合成发布**：直接使用生成图，或导入排版工具叠加文字后发布
 
 ---
 
@@ -171,6 +118,8 @@ def generate_knowledge_card(card_content: str, output_path: str = "card.png"):
 
 【来源】《深度工作》Cal Newport
 ```
+
+**Step 3**：基于上方文案，当前客户端直接生成知识卡片插画。
 
 ---
 
