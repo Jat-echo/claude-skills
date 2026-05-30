@@ -35,11 +35,11 @@ Extracts the core theme, logical structure, and key insight from any long-form c
 ```bash
 # macOS / Linux
 curl -o ~/.claude/commands/knowledge-card.md \
-  "https://raw.githubusercontent.com/Jat-echo/claude-skills/main/knowledge-card/knowledge-card.md"
+  "https://raw.githubusercontent.com/Jat-echo/claude-skills/refs/heads/main/knowledge-card/knowledge-card.md"
 ```
 ```powershell
 # Windows
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Jat-echo/claude-skills/main/knowledge-card/knowledge-card.md" `
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Jat-echo/claude-skills/refs/heads/main/knowledge-card/knowledge-card.md" `
   -OutFile "$env:USERPROFILE\.claude\commands\knowledge-card.md"
 ```
 

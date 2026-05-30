@@ -127,8 +127,12 @@
 
 ```bash
 # macOS / Linux
-cp knowledge-card.md ~/.claude/commands/knowledge-card.md
+curl -o ~/.claude/commands/knowledge-card.md \
+  "https://raw.githubusercontent.com/Jat-echo/claude-skills/refs/heads/main/knowledge-card/knowledge-card.md"
+```
 
-# Windows (PowerShell)
-Copy-Item "knowledge-card.md" "$env:APPDATA\Claude\commands\knowledge-card.md"
+```powershell
+# Windows
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Jat-echo/claude-skills/refs/heads/main/knowledge-card/knowledge-card.md" `
+  -OutFile "$env:USERPROFILE\.claude\commands\knowledge-card.md"
 ```
