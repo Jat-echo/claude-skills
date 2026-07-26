@@ -1,17 +1,27 @@
 # -*- coding: utf-8 -*-
-"""
+r"""
 Step 1: Download invoices from Feishu mail 发票 folder.
 Usage: python invoice_download.py <OUT_DIR> [<YEAR_MONTH>]
   OUT_DIR     e.g. D:\Work\Uah\办公\报销\202605
   YEAR_MONTH  e.g. 202605  (optional filter; omit to download all)
 """
 import sys, os, re, json, subprocess, html, zipfile, io
+import urllib.request, urllib.parse
 sys.stdout.reconfigure(encoding='utf-8')
+
+# 直连 opener（不走本地代理），用于诺诺等国内发票平台
+_noproxy_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 LARK   = r"C:\Users\Administrator\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\npm\lark-cli.cmd"
 PY39   = r"D:\Software\Python\Python39\python.exe"
 env    = os.environ.copy()
 env["PATH"] = r"C:\Program Files\nodejs;" + env.get("PATH", "")
+env["LARK_CLI_NO_PROXY"] = "1"          # mail API 走直连，避免本地代理干扰
+
+# 下载附件用的环境：去掉代理，飞书 drive 直连即可
+dl_env = os.environ.copy()
+for _k in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "ALL_PROXY", "all_proxy"):
+    dl_env.pop(_k, None)
 
 OUT_DIR = sys.argv[1] if len(sys.argv) > 1 else r"D:\Work\Uah\办公\报销\202605"
 os.makedirs(OUT_DIR, exist_ok=True)
@@ -19,7 +29,8 @@ os.makedirs(OUT_DIR, exist_ok=True)
 # ── lark helpers ──────────────────────────────────────────────────────────
 
 def run_lark(args):
-    r = subprocess.run([LARK] + args, capture_output=True, env=env)
+    # 所有邮件命令必须以用户身份调用
+    r = subprocess.run([LARK] + args + ['--as', 'user'], capture_output=True, env=env)
     return r.stdout.decode('utf-8-sig', errors='replace')
 
 def get_att_url(msg_id, att_id):
@@ -42,7 +53,7 @@ def download(url, out_path):
         f"resp=urllib.request.urlopen(req,timeout=30);"
         f"open({repr(out_path)},'wb').write(resp.read())"
     )
-    subprocess.run([PY39, "-c", code], capture_output=True)
+    subprocess.run([PY39, "-c", code], capture_output=True, env=dl_env)
     if not os.path.exists(out_path) or os.path.getsize(out_path) == 0:
         return None
     with open(out_path, 'rb') as f:
@@ -59,6 +70,44 @@ def extract_pdf_links(html_body):
                 if url not in links:
                     links.append(url)
     return links
+
+def extract_nuonuo_links(html_body):
+    """从正文提取诺诺发票(jss.com.cn)短链，如 https://nnfp.jss.com.cn/<code>。"""
+    decoded = html.unescape(html_body)
+    out = []
+    for u in re.findall(r'https?://nnfp\.jss\.com\.cn/[^\s"\'<>]+', decoded):
+        p = urllib.parse.urlparse(u)
+        seg = p.path.strip('/')
+        if '/' in seg:
+            # 已是 printQrcode?paramList=... 之类，保留带 paramList 的
+            if 'paramList' in (p.query or '') and u not in out:
+                out.append(u)
+            continue
+        # 单段短码链接；排除接口/资源路径
+        if seg and not seg.startswith(('allow', 'sapi', 'scan-invoice', 'nnwzf', 'nnww')):
+            if u not in out:
+                out.append(u)
+    return out
+
+def get_nuonuo_pdf(url):
+    """诺诺发票：短链→paramList→明细接口→PDF 直链。返回 pdf_url 或 None。"""
+    try:
+        final = _noproxy_opener.open(
+            urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'}),
+            timeout=30).geturl()
+        param = urllib.parse.parse_qs(urllib.parse.urlparse(final).query).get('paramList', [None])[0]
+        if not param:
+            return None
+        data = ('paramList=' + urllib.parse.quote(param, safe='')).encode()
+        req = urllib.request.Request(
+            'https://nnfp.jss.com.cn/sapi/scan2/getIvcDetailShow.do', data=data,
+            headers={'User-Agent': 'Mozilla/5.0',
+                     'Content-Type': 'application/x-www-form-urlencoded', 'Referer': final})
+        j = json.loads(_noproxy_opener.open(req, timeout=30).read().decode('utf-8'))
+        return j.get('data', {}).get('invoiceSimpleVo', {}).get('url')
+    except Exception as e:
+        print(f"  [WARN] 诺诺解析失败: {e}")
+        return None
 
 def sanitize(s):
     return re.sub(r'[\\/:*?"<>|]', '_', s)
@@ -78,25 +127,41 @@ for f in os.listdir(OUT_DIR):
 # ── List emails in 发票 folder ────────────────────────────────────────────
 
 print("Listing 发票 folder...")
-out = run_lark(['mail', 'user_mailbox.message', 'list',
-                '--params', json.dumps({"user_mailbox_id": "me", "folder_key": "inbox",
-                                        "page_size": 50})])
-# NOTE: adjust folder_key for your 发票 folder; use lark-cli mail to explore folders first.
-# Default uses inbox. Run: lark-cli mail user_mailbox.folder list --params '{"user_mailbox_id":"me"}'
+
+# 1) 按名称找到「发票」文件夹 id
+fout = run_lark(['mail', 'user_mailbox.folders', 'list',
+                 '--params', json.dumps({"user_mailbox_id": "me"})])
+folder_id = None
+try:
+    for f in json.loads(fout).get('data', {}).get('items', []):
+        if f.get('name') == '发票':
+            folder_id = f.get('id'); break
+except Exception as e:
+    print(f"[ERROR] 文件夹列取失败: {e}\n{fout[:300]}")
+    sys.exit(1)
+if not folder_id:
+    print("[ERROR] 未找到「发票」文件夹")
+    sys.exit(1)
+
+# 2) 列出该文件夹全部邮件（page_size 上限 20，自动翻页）；返回的 items 是 message_id 字符串数组
+out = run_lark(['mail', 'user_mailbox.messages', 'list',
+                '--params', json.dumps({"user_mailbox_id": "me",
+                                        "folder_id": folder_id, "page_size": 20}),
+                '--page-all', '--page-limit', '50'])
 
 try:
     messages = json.loads(out).get('data', {}).get('items', [])
 except Exception as e:
-    print(f"[ERROR] Cannot list emails: {e}")
+    print(f"[ERROR] Cannot list emails: {e}\n{out[:300]}")
     sys.exit(1)
 
 print(f"Found {len(messages)} messages")
 
 results = []
 for i, msg in enumerate(messages):
-    msg_id  = msg.get('message_id', '')
-    subject = msg.get('subject', '') or ''
-    print(f"\n[{i+1}/{len(messages)}] {subject[:60]}")
+    msg_id  = msg if isinstance(msg, str) else (msg.get('message_id', '') or '')
+    if not msg_id:
+        continue
 
     # Fetch full message
     out = run_lark(['mail', '+message', '--message-id', msg_id, '--format', 'json'])
@@ -105,6 +170,9 @@ for i, msg in enumerate(messages):
     except:
         continue
 
+    subject = data.get('subject', '') or ''
+    print(f"\n[{i+1}/{len(messages)}] {subject[:60]}")
+
     body_html   = data.get('body_html', '') or ''
     attachments = data.get('attachments', []) or []
 
@@ -112,9 +180,13 @@ for i, msg in enumerate(messages):
     hint     = subject
 
     # ── A: PDF attachments ───────────────────────────────────────────────
+    # 通行费邮件常同时带 ZIP(真发票) 和 松散的「票据/行程/汇总单」PDF；
+    # 后者不是增值税发票，须跳过，交给 Step B 从 ZIP 里取真发票。
+    _SKIP_PDF_KW = ('票据', '行程', '汇总单', '清单')
     pdf_atts = [a for a in attachments
-                if a.get('content_type', '') == 'application/pdf'
-                or (a.get('filename', '') or '').lower().endswith('.pdf')]
+                if (a.get('content_type', '') == 'application/pdf'
+                    or (a.get('filename', '') or '').lower().endswith('.pdf'))
+                and not any(kw in (a.get('filename', '') or '') for kw in _SKIP_PDF_KW)]
     for att in pdf_atts:
         att_id = att.get('id') or att.get('attachment_id')
         if not att_id: continue
@@ -170,6 +242,19 @@ for i, msg in enumerate(messages):
             pdf_data = download(link, tmp)
             if pdf_data and len(pdf_data) > 1000 and pdf_data[:4] == b'%PDF':
                 print(f"  [OK] Link download ({len(pdf_data)//1024}KB)")
+                break
+            pdf_data = None
+
+    # ── C2: 诺诺发票 (jss.com.cn) SPA 短链 → 走接口取 PDF 直链 ───────────
+    if not pdf_data:
+        for nlink in extract_nuonuo_links(body_html):
+            pdf_url = get_nuonuo_pdf(nlink)
+            if not pdf_url:
+                continue
+            tmp = os.path.join(OUT_DIR, f"_tmp_{i}.pdf")
+            pdf_data = download(pdf_url, tmp)
+            if pdf_data and len(pdf_data) > 1000 and pdf_data[:4] == b'%PDF':
+                print(f"  [OK] 诺诺发票 ({len(pdf_data)//1024}KB)")
                 break
             pdf_data = None
 

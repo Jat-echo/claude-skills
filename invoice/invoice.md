@@ -19,7 +19,7 @@
 | lark-cli | `C:\Users\Administrator\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\npm\lark-cli.cmd` |
 | Python 39（下载用） | `D:\Software\Python\Python39\python.exe` |
 | miniconda3（pdfplumber） | `D:\Software\miniconda3\python.exe` |
-| 脚本目录 | `D:\Work\Uah\办公\报销\scripts\` |
+| 脚本目录 | `D:\Work\Uah\办公\报销\scripts\invoice\` |
 
 pdfplumber 安装（首次/SSL 缺失时）：
 ```
@@ -39,7 +39,7 @@ OUT_DIR = r"D:\Work\Uah\办公\报销\202606"  # 按月份修改
 ### Step 1：下载发票
 
 ```bash
-D:\Software\Python\Python39\python.exe scripts\invoice_download.py <OUT_DIR>
+D:\Software\Python\Python39\python.exe scripts\invoice\invoice_download.py <OUT_DIR>
 ```
 
 优先级（对每封邮件依次尝试）：
@@ -51,7 +51,7 @@ D:\Software\Python\Python39\python.exe scripts\invoice_download.py <OUT_DIR>
 ### Step 2：重命名
 
 ```bash
-D:\Software\miniconda3\python.exe scripts\invoice_rename.py <OUT_DIR>
+D:\Software\miniconda3\python.exe scripts\invoice\invoice_rename.py <OUT_DIR>
 ```
 
 - 金额：严格提取 `（小写）¥XXX.XX`（价税合计小写，含税总额）
@@ -78,7 +78,7 @@ D:\Software\miniconda3\python.exe scripts\invoice_rename.py <OUT_DIR>
 ### Step 3：去重
 
 ```bash
-D:\Software\miniconda3\python.exe scripts\invoice_dedup.py <OUT_DIR>
+D:\Software\miniconda3\python.exe scripts\invoice\invoice_dedup.py <OUT_DIR>
 ```
 
 按 MD5 哈希比对，保留文件名靠前的那份，删除其余副本。
@@ -135,7 +135,7 @@ Get-ChildItem <OUT_DIR> -Filter "*.pdf" | ForEach-Object {
 将此文件复制到 Claude Code 全局命令目录即可：
 
 ```powershell
-Copy-Item "D:\Work\Uah\办公\报销\scripts\invoice.md" `
+Copy-Item "D:\Work\Uah\办公\报销\scripts\invoice\invoice.md" `
           "C:\Users\Administrator\.claude\commands\invoice.md"
 ```
 

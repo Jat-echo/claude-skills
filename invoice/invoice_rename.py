@@ -25,6 +25,9 @@ def get_amount(text):
     """Extract 价税合计（小写） — the tax-inclusive definitive total."""
     m = re.search(r'[（(]小写[）)]\s*[¥￥]\s*([\d,]+\.\d{2})', text)
     if m: return m.group(1).replace(',', '')
+    # (小写) 与 ¥ 跨行时：取「大写金额行」末尾紧跟的 ¥ 小写数字
+    m = re.search(r'[壹贰叁肆伍陆柒捌玖拾佰仟万亿圆元角分整]{2,}\s*[¥￥]\s*([\d,]+\.\d{2})', text)
+    if m: return m.group(1).replace(',', '')
     m = re.search(r'价税合计\s*[¥￥]\s*([\d,]+\.\d{2})', text)
     if m: return m.group(1).replace(',', '')
     return None
@@ -36,7 +39,9 @@ def get_seller(text):
 def get_category(text, seller=""):
     """Classify by actual purchased item content, not by channel/retailer."""
     items = re.findall(r'\*([^*\n]+)\*([^*\n]*)', text)
-    cats  = " ".join(c.strip() for c, _ in items).lower()
+    # 同时纳入星号大类(如 生产生活服务)与其后的具体商品名(如 餐饮服务)，
+    # 否则「*生产生活服务*餐饮服务」只会看到「生活服务」而误判为充电
+    cats  = " ".join((c + " " + d).strip() for c, d in items).lower()
 
     # 通行费 — check full text for toll keywords
     if any(k in text for k in ['收费公路', '通行费', 'ETC', '路桥']):
@@ -51,7 +56,8 @@ def get_category(text, seller=""):
         return '住宿'
 
     rules = [
-        (['供电', '充电', '生活服务'],                                      '充电'),
+        # 先匹配明确的「充电/用电」，避免下面的餐饮被「生活服务」提前吞掉
+        (['供电', '电费', '充电服务', '充电桩', '换电'],                     '充电'),
         (['汽油', '燃油', '成品油'],                                        '加油费'),
         (['药', '化学药品', '医疗', '保健'],                                 '药品'),
         (['电子元件', '电子', '电容', '电阻', '集成电路', '半导体'],            '电子器件'),
@@ -61,6 +67,8 @@ def get_category(text, seller=""):
           '糖果', '方便食品', '熟肉', '果类', '乳制品', '调味', '零食'],      '食品'),
         (['日用', '杂品', '洗护', '家居', '清洁', '纸品', '文具', '办公'],    '日用品'),
         (['金属制品', '五金', '螺丝', '零件'],                               '五金'),
+        # 兜底：仅「生活服务」而无具体商品的票据归其他（真充电由上面的供电/充电服务命中）
+        (['生活服务'],                                                      '其他'),
     ]
     for keys, label in rules:
         if any(k in cats for k in keys):
